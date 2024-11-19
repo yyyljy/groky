@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat with Grok AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="chat-layout">
+      <div class="chat-list" id="chat-list">
+        <div class="chat-list-header">
+          <button class="toggle-list" onclick="toggleChatList()">☰</button>
+          <button class="new-chat-btn" onclick="startNewChat()">+</button>
+        </div>
+        <div class="chat-list-content"></div>
+      </div>
+      <div class="chat-container">
+        <div class="chat-body" id="chat-body"></div>
+        <div class="chat-footer">
+          <input
+            type="text"
+            id="input-message"
+            placeholder="메시지를 입력하세요..."
+            onkeypress="if(event.keyCode === 13) sendMessage()"
+          />
+          <button onclick="sendMessage()">전송</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = 'https://api.x.ai/v1/chat/completions';
+
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+      });
+
+      function toggleChatList() {
+        const chatList = document.getElementById('chat-list');
+        chatList.classList.toggle('collapsed');
+      }
+
+      function startNewChat() {
+        const chatBody = document.getElementById('chat-body');
+        chatBody.innerHTML = '';
+        document.getElementById('input-message').value = '';
+      }
+
+      async function fetchAIResponse(messages) {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages,
+          }),
+        });
+        return await response.json();
+      }
+
+      async function saveChat(userMessage, assistantMessage) {
+        const now = new Date();
+        const timestamp =
+          now.getFullYear().toString().slice(-2) +
+          (now.getMonth() + 1).toString().padStart(2, '0') +
+          now.getDate().toString().padStart(2, '0') +
+          '_' +
+          now.getHours().toString().padStart(2, '0') +
+          now.getMinutes().toString().padStart(2, '0') +
+          now.getSeconds().toString().padStart(2, '0');
+
+        const summaryResult = await fetchAIResponse([
+          {
+            role: 'system',
+            content:
+              'Summarize the following text in English within 20 characters.',
+          },
+          {
+            role: 'user',
+            content: userMessage,
+          },
+        ]);
+
+        const shortQuestion = summaryResult.choices[0].message.content
+          .substring(0, 20)
+          .replace(/[^\w\s]/gi, '')
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+
+        const filename = `${timestamp}_${shortQuestion}.md`;
+        const content = `# Chat Log\n\n## User\n${userMessage}\n\n## Assistant\n${assistantMessage}`;
+
+        try {
+          const response = await fetch('/save-chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              filename,
+              content,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to save chat');
+          }
+
+          const chatItem = document.createElement('div');
+          chatItem.className = 'chat-item';
+          chatItem.innerHTML = `
+            <h3>${shortQuestion}</h3>
+            <p>${now.toLocaleDateString()} ${now.toLocaleTimeString()}</p>
+          `;
+          chatItem.onclick = () => loadChat(filename);
+          document.querySelector('.chat-list-content').prepend(chatItem);
+        } catch (error) {
+          console.error('Failed to save chat:', error);
+        }
+      }
+
+      async function sendMessage() {
+        const input = document.getElementById('input-message');
+        const message = input.value.trim();
+        if (message) {
+          appendMessage('user', message);
+          input.value = '';
+
+          const data = await fetchAIResponse([
+            {
+              role: 'system',
+              content: 'You are a test assistant. Answer in Korean.',
+            },
+            {
+              role: 'user',
+              content: message,
+            },
+          ]);
+
+          const assistantMessage = data.choices[0].message.content;
+          appendMessage('assistant', assistantMessage);
+          saveChat(message, assistantMessage);
+        }
+      }
+
+      function appendMessage(sender, message) {
+        const chatBody = document.getElementById('chat-body');
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message', sender);
+
+        if (sender === 'assistant') {
+          messageElement.innerHTML = marked.parse(message);
+        } else {
+          messageElement.textContent = message;
+        }
+
+        chatBody.appendChild(messageElement);
+        chatBody.scrollTop = chatBody.scrollHeight;
+      }
+
+      async function loadChatList() {
+        try {
+          const response = await fetch('/chat-list');
+          const chatFiles = await response.json();
+          const chatList = document.querySelector('.chat-list-content');
+          chatList.innerHTML = '';
+
+          chatFiles.sort((a, b) => {
+            const dateA = new Date(
+              a.date +
+                ' ' +
+                a.filename
+                  .split('_')[1]
+                  .replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3'),
+            );
+            const dateB = new Date(
+              b.date +
+                ' ' +
+                b.filename
+                  .split('_')[1]
+                  .replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3'),
+            );
+            return dateB - dateA;
+          });
+
+          chatFiles.forEach((chat) => {
+            const chatItem = document.createElement('div');
+            chatItem.className = 'chat-item';
+            chatItem.innerHTML = `
+              <h3>${chat.filename.split('_').slice(2).join('_').replace('.md', '')}</h3>
+              <p>${chat.date} ${chat.filename
+                .split('_')
+                .slice(1, 2)
+                .join('_')
+                .replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')}</p>
+            `;
+            chatItem.onclick = () => loadChat(chat.filename);
+            chatList.appendChild(chatItem);
+          });
+        } catch (error) {
+          console.error('Failed to load chat list:', error);
+        }
+      }
+
+      async function loadChat(filename) {
+        try {
+          const response = await fetch(`/chat/${filename}`);
+          const chatData = await response.json();
+
+          const chatBody = document.getElementById('chat-body');
+          chatBody.innerHTML = '';
+
+          appendMessage('user', chatData.userMessage);
+          appendMessage('assistant', chatData.assistantMessage);
+        } catch (error) {
+          console.error('Failed to load chat:', error);
+        }
+      }
+
+      window.onload = loadChatList;
+    </script>
+  </body>
+</html>
