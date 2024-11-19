@@ -34,3 +34,6 @@ NestJS와 HTML/JavaScript를 사용한 AI 채팅 애플리케이션입니다.
    XAPI_KEY=your_api_key_here
 
 4. 서버 실행
+
+5. localhost:3000/index 접속
+   ![메인 화면](https://github.com/yyyljy/groky/raw/main/public/image.png)
