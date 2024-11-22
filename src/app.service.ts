@@ -2,24 +2,35 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { SystemConfigService } from './system-config.service';
 
 @Injectable()
 export class AppService {
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private systemConfigService: SystemConfigService,
+  ) {}
   private readonly chatDir = 'chat';
+  private apiKey = this.configService.get<string>('XAPI_KEY');
 
   async chatWithAI(messages: any[]) {
     try {
-      const apiKey = this.configService.get<string>('XAPI_KEY');
+      const messagesWithSystem = [
+        {
+          role: 'system',
+          content: this.systemConfigService.getSystemContent(),
+        },
+        ...messages,
+      ];
 
       const response = await fetch('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
-          messages,
+          messages: messagesWithSystem,
           model: 'grok-beta',
           stream: false,
           temperature: 0,
@@ -72,6 +83,15 @@ export class AppService {
   async saveChat(filename: string, content: string) {
     await fs.mkdir(this.chatDir, { recursive: true });
     await fs.writeFile(join(this.chatDir, filename), content);
+    return { success: true };
+  }
+
+  async getSystemContent() {
+    return { content: this.systemConfigService.getSystemContent() };
+  }
+
+  async setSystemContent(content: string) {
+    await this.systemConfigService.setSystemContent(content);
     return { success: true };
   }
 }

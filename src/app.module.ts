@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ChatController } from './app.controller';
 import { AppService } from './app.service';
-
+import { SystemConfigService } from './system-config.service';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -10,6 +10,6 @@ import { AppService } from './app.service';
     }),
   ],
   controllers: [ChatController],
-  providers: [AppService],
+  providers: [AppService, SystemConfigService],
 })
 export class AppModule {}

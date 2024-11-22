@@ -31,4 +31,14 @@ export class ChatController {
   async chatWithAI(@Body() data: { messages: any[] }) {
     return this.chatService.chatWithAI(data.messages);
   }
+
+  @Get('api/system-content')
+  getSystemContent() {
+    return this.chatService.getSystemContent();
+  }
+
+  @Post('api/system-content')
+  setSystemContent(@Body() body: { content: string }) {
+    return this.chatService.setSystemContent(body.content);
+  }
 }
